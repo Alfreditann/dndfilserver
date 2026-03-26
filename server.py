@@ -1,5 +1,7 @@
 from flask import Flask, request, redirect, url_for, send_from_directory, Response
 import os
+import shutil
+import json
 
 app = Flask(__name__)
 BASE_FOLDER = "uploads"
@@ -8,7 +10,12 @@ os.makedirs(BASE_FOLDER, exist_ok=True)
 USERNAME = "admin"
 PASSWORD = "1234"
 
-ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
+ALLOWED_EXTENSIONS = {
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp',
+    '.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v'
+}
+
+VIDEO_EXTENSIONS = {'.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v'}
 
 def check_auth(u, p):
     return u == USERNAME and p == PASSWORD
@@ -28,6 +35,11 @@ def allowed_file(filename):
     ext = os.path.splitext(filename)[1].lower()
     return ext in ALLOWED_EXTENSIONS
 
+
+def is_video_file(filename):
+    ext = os.path.splitext(filename)[1].lower()
+    return ext in VIDEO_EXTENSIONS
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     auth = request.authorization
@@ -38,9 +50,10 @@ def index():
     folder = get_safe_path(current_path)
 
     if request.method == "POST":
-        file = request.files.get("file")
-        if file and allowed_file(file.filename):
-            file.save(os.path.join(folder, file.filename))
+        uploaded_files = request.files.getlist("files")
+        for file in uploaded_files:
+            if file and allowed_file(file.filename):
+                file.save(os.path.join(folder, file.filename))
         return redirect(url_for("index", path=current_path))
 
     items = os.listdir(folder)
@@ -55,14 +68,15 @@ def index():
             files.append(item)
 
     html_items = ""
-
+    image_sources = []
+    image_index = 0
     if current_path:
         parent = os.path.dirname(current_path)
         html_items += f'<a class="back" href="/?path={parent}">⬅ Back</a>'
 
     html_items += '<div class="grid">'
 
-    # Folder cards with placeholder icon and white folder name
+    # Folder cards
     for d in folders:
         sub_path = os.path.join(current_path, d) if current_path else d
         html_items += f"""
@@ -72,21 +86,28 @@ def index():
                 <div class="filename">{d}</div>
             </a>
             <div class="actions">
-                <a class="btn delete" href="/delete?path={sub_path}" onclick="return confirm('Delete empty folder?')">🗑 Delete</a>
+                <a class="btn delete" href="/delete?path={sub_path}" onclick="return confirm('Delete folder and all its contents?')">🗑 Delete</a>
             </div>
         </div>
         """
 
-    # Image file cards
+    # Media file cards
     for f in files:
         file_rel_path = os.path.join(current_path, f) if current_path else f
+        file_url_path = file_rel_path.replace("\\", "/")
+        if is_video_file(f):
+            media_preview = f'<video controls preload="metadata"><source src="/files/{file_url_path}"></video>'
+        else:
+            image_sources.append(f"/files/{file_url_path}")
+            media_preview = f'<img src="/files/{file_url_path}" alt="{f}" onclick="openLightbox({image_index})" style="cursor:pointer">'
+            image_index += 1
         html_items += f"""
         <div class="file-card">
-            <img src="/files/{file_rel_path}" alt="{f}">
+            {media_preview}
             <div class="filename">{f}</div>
             <div class="actions">
-                <a class="btn" href="/download/{file_rel_path}">⬇ Download</a>
-                <a class="btn delete" href="/delete?path={file_rel_path}" onclick="return confirm('Delete file?')">🗑 Delete</a>
+                <a class="btn" href="/download/{file_url_path}">⬇ Download</a>
+                <a class="btn delete" href="/delete?path={file_url_path}" onclick="return confirm('Delete file?')">🗑 Delete</a>
             </div>
         </div>
         """
@@ -97,6 +118,7 @@ def index():
     <html>
     <head>
         <title>Dungeon Dreamgirls ❤️‍🔥</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             body {{
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -115,12 +137,16 @@ def index():
             form {{
                 margin: 10px auto;
                 text-align: center;
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 10px;
             }}
             input[type="file"], input[type="text"], input[type="submit"] {{
                 padding: 8px;
-                margin: 5px;
                 border-radius: 5px;
                 border: none;
+                font-size: 1em;
             }}
             input[type="submit"] {{
                 background-color: #e63946;
@@ -144,17 +170,25 @@ def index():
                 width: 150px;
                 text-align: center;
                 transition: transform 0.2s;
+                flex: 1 0 120px;
+                max-width: 150px;
             }}
-            .file-card:hover {{
-                transform: scale(1.05);
-            }}
+            .file-card:hover {{ transform: scale(1.05); }}
             .file-card img {{
-                width: 120px;
+                width: 100%;
                 height: 120px;
                 object-fit: cover;
                 border-radius: 5px;
                 margin-bottom: 5px;
                 border: 1px solid #555;
+            }}
+            .file-card video {{
+                width: 100%;
+                height: 120px;
+                border-radius: 5px;
+                margin-bottom: 5px;
+                border: 1px solid #555;
+                background: #000;
             }}
             .filename {{
                 margin-bottom: 5px;
@@ -182,12 +216,60 @@ def index():
                 font-weight: bold;
             }}
             .back:hover {{ color: #fca311; }}
-            .folder-link {{
-                color: #ffffff;          /* folder name white */
-                text-decoration: none;
+            .folder-link {{ color: #ffffff; text-decoration: none; }}
+            .folder-link:hover {{ color: #fca311; }}
+            #lightbox {{
+                position: fixed;
+                display: none;
+                top: 0; left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.9);
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
             }}
-            .folder-link:hover {{
-                color: #fca311;          /* hover gold */
+            #lightbox img {{
+                max-width: 90%;
+                max-height: 90%;
+                border-radius: 10px;
+                box-shadow: 0 0 20px #000;
+                object-fit: contain;
+            }}
+            .lightbox-nav {{
+                position: absolute;
+                top: 50%;
+                transform: translateY(-50%);
+                background: rgba(0, 0, 0, 0.45);
+                color: #fff;
+                border: 1px solid rgba(255, 255, 255, 0.5);
+                border-radius: 999px;
+                width: 44px;
+                height: 44px;
+                font-size: 28px;
+                line-height: 38px;
+                cursor: pointer;
+                user-select: none;
+            }}
+            .lightbox-nav:hover {{
+                background: rgba(255, 255, 255, 0.2);
+            }}
+            #lightbox-prev {{ left: 20px; }}
+            #lightbox-next {{ right: 20px; }}
+            @media (max-width: 600px) {{
+                h1 {{ font-size: 2em; }}
+                .file-card {{ width: 45%; max-width: 150px; }}
+                input[type="file"], input[type="text"], input[type="submit"] {{ width: 90%; font-size: 0.9em; }}
+                .lightbox-nav {{
+                    width: 38px;
+                    height: 38px;
+                    font-size: 24px;
+                    line-height: 32px;
+                }}
+            }}
+            @media (max-width: 400px) {{
+                .file-card {{ width: 90%; max-width: 200px; }}
+                .grid {{ gap: 10px; }}
             }}
         </style>
     </head>
@@ -195,7 +277,7 @@ def index():
         <h1>Dungeon Dreamgirls <span>❤️‍🔥</span></h1>
 
         <form method="POST" enctype="multipart/form-data">
-            <input type="file" name="file" accept="image/*" required>
+            <input type="file" name="files" accept="image/*,video/*" multiple required>
             <input type="submit" value="Upload to '{current_path or '/'}'">
         </form>
 
@@ -206,6 +288,56 @@ def index():
         </form>
 
         {html_items}
+
+        <!-- Lightbox container -->
+        <div id="lightbox" onclick="closeLightbox()">
+            <button id="lightbox-prev" class="lightbox-nav" onclick="event.stopPropagation(); changeLightbox(-1)">&#10094;</button>
+            <img id="lightbox-img" src="" onclick="event.stopPropagation()">
+            <button id="lightbox-next" class="lightbox-nav" onclick="event.stopPropagation(); changeLightbox(1)">&#10095;</button>
+        </div>
+
+        <script>
+        const lightboxImages = {json.dumps(image_sources)};
+        let currentLightboxIndex = 0;
+
+        function openLightbox(index) {{
+            if (!lightboxImages.length) return;
+            currentLightboxIndex = index;
+            const lightbox = document.getElementById('lightbox');
+            showLightboxImage(currentLightboxIndex);
+            updateLightboxArrows();
+            lightbox.style.display = 'flex';
+        }}
+
+        function showLightboxImage(index) {{
+            const img = document.getElementById('lightbox-img');
+            img.src = lightboxImages[index];
+        }}
+
+        function changeLightbox(step) {{
+            if (!lightboxImages.length) return;
+            currentLightboxIndex = (currentLightboxIndex + step + lightboxImages.length) % lightboxImages.length;
+            showLightboxImage(currentLightboxIndex);
+        }}
+
+        function updateLightboxArrows() {{
+            const showArrows = lightboxImages.length > 1;
+            document.getElementById('lightbox-prev').style.display = showArrows ? 'block' : 'none';
+            document.getElementById('lightbox-next').style.display = showArrows ? 'block' : 'none';
+        }}
+
+        function closeLightbox() {{
+            document.getElementById('lightbox').style.display = 'none';
+        }}
+
+        document.addEventListener('keydown', function(e) {{
+            const lightbox = document.getElementById('lightbox');
+            if (lightbox.style.display !== 'flex') return;
+            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'ArrowLeft') changeLightbox(-1);
+            if (e.key === 'ArrowRight') changeLightbox(1);
+        }});
+        </script>
     </body>
     </html>
     """
@@ -214,13 +346,10 @@ def index():
 def mkdir():
     path = request.args.get("path", "")
     name = request.args.get("name", "")
-
     if not name:
         return redirect(url_for("index", path=path))
-
     folder = get_safe_path(path)
     os.makedirs(os.path.join(folder, name), exist_ok=True)
-
     return redirect(url_for("index", path=path))
 
 @app.route("/files/<path:filename>")
@@ -233,23 +362,24 @@ def download(filename):
 
 @app.route("/delete")
 def delete():
+    import urllib.parse
     path = request.args.get("path", "")
+    path = urllib.parse.unquote(path)  # decode URL
     full_path = get_safe_path(path)
 
     if os.path.isdir(full_path):
         try:
-            os.rmdir(full_path)
-        except Exception:
-            pass
+            shutil.rmtree(full_path)
+        except Exception as e:
+            print("Error deleting folder:", e)
     elif os.path.isfile(full_path):
         try:
             os.remove(full_path)
-        except Exception:
-            pass
+        except Exception as e:
+            print("Error deleting file:", e)
 
     parent = os.path.dirname(path)
     return redirect(url_for("index", path=parent))
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))  # default 10000 for local testing
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=8000)
