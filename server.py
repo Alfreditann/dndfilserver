@@ -7,8 +7,11 @@ app = Flask(__name__)
 BASE_FOLDER = "uploads"
 os.makedirs(BASE_FOLDER, exist_ok=True)
 
-USERNAME = "admin"
-PASSWORD = "1234"
+# Multi-user system with folder access control
+USERS = {
+    "admin": {"password": "1234", "folder": "uploads"},
+    "user2": {"password": "5678", "folder": "uploads2"}
+}
 
 ALLOWED_EXTENSIONS = {
     '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp',
@@ -18,14 +21,22 @@ ALLOWED_EXTENSIONS = {
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v'}
 
 def check_auth(u, p):
-    return u == USERNAME and p == PASSWORD
+    if u not in USERS:
+        return False
+    return USERS[u]["password"] == p
+
+def get_user_base_folder(username):
+    """Get the base folder for a user"""
+    if username not in USERS:
+        return BASE_FOLDER
+    return USERS[username]["folder"]
 
 def authenticate():
     return Response("Login required", 401,
                     {"WWW-Authenticate": 'Basic realm="Login"'})
 
-def get_safe_path(path):
-    base_abs = os.path.abspath(BASE_FOLDER)
+def get_safe_path(path, base_folder):
+    base_abs = os.path.abspath(base_folder)
     full_path = os.path.normpath(os.path.join(base_abs, path))
     if not full_path.startswith(base_abs):
         return base_abs
@@ -46,8 +57,11 @@ def index():
     if not auth or not check_auth(auth.username, auth.password):
         return authenticate()
 
+    user_base_folder = get_user_base_folder(auth.username)
+    os.makedirs(user_base_folder, exist_ok=True)
+    
     current_path = request.args.get("path", "")
-    folder = get_safe_path(current_path)
+    folder = get_safe_path(current_path, user_base_folder)
 
     if request.method == "POST":
         uploaded_files = request.files.getlist("files")
@@ -344,28 +358,46 @@ def index():
 
 @app.route("/mkdir")
 def mkdir():
+    auth = request.authorization
+    if not auth or not check_auth(auth.username, auth.password):
+        return authenticate()
+    
+    user_base_folder = get_user_base_folder(auth.username)
     path = request.args.get("path", "")
     name = request.args.get("name", "")
     if not name:
         return redirect(url_for("index", path=path))
-    folder = get_safe_path(path)
+    folder = get_safe_path(path, user_base_folder)
     os.makedirs(os.path.join(folder, name), exist_ok=True)
     return redirect(url_for("index", path=path))
 
 @app.route("/files/<path:filename>")
 def files(filename):
-    return send_from_directory(BASE_FOLDER, filename)
+    auth = request.authorization
+    if not auth or not check_auth(auth.username, auth.password):
+        return authenticate()
+    user_base_folder = get_user_base_folder(auth.username)
+    return send_from_directory(user_base_folder, filename)
 
 @app.route("/download/<path:filename>")
 def download(filename):
-    return send_from_directory(BASE_FOLDER, filename, as_attachment=True)
+    auth = request.authorization
+    if not auth or not check_auth(auth.username, auth.password):
+        return authenticate()
+    user_base_folder = get_user_base_folder(auth.username)
+    return send_from_directory(user_base_folder, filename, as_attachment=True)
 
 @app.route("/delete")
 def delete():
     import urllib.parse
+    auth = request.authorization
+    if not auth or not check_auth(auth.username, auth.password):
+        return authenticate()
+    
+    user_base_folder = get_user_base_folder(auth.username)
     path = request.args.get("path", "")
     path = urllib.parse.unquote(path)  # decode URL
-    full_path = get_safe_path(path)
+    full_path = get_safe_path(path, user_base_folder)
 
     if os.path.isdir(full_path):
         try:
