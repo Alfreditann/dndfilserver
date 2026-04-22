@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dungeon Dreamgirls ❤️‍🔥</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1e1e2f;
+            color: #f1f1f1;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            font-size: 3em;
+            color: #e63946;
+            text-shadow: 2px 2px 5px #0d0d1a;
+        }
+        h1 span { color: #fca311; }
+        form {
+            margin: 10px auto;
+            text-align: center;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+        input[type="file"], input[type="text"], input[type="submit"] {
+            padding: 8px;
+            border-radius: 5px;
+            border: none;
+            font-size: 1em;
+        }
+        input[type="submit"] {
+            background-color: #e63946;
+            color: white;
+            cursor: pointer;
+        }
+        input[type="submit"]:hover {
+            background-color: #f77f00;
+        }
+        .grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        .file-card {
+            background: #2a2a3f;
+            padding: 10px;
+            border-radius: 10px;
+            width: 150px;
+            text-align: center;
+            transition: transform 0.2s;
+            flex: 1 0 120px;
+            max-width: 150px;
+        }
+        .file-card:hover { transform: scale(1.05); }
+        .file-card img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            border: 1px solid #555;
+        }
+        .file-card video {
+            width: 100%;
+            height: 120px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            border: 1px solid #555;
+            background: #000;
+        }
+        .filename {
+            margin-bottom: 5px;
+            font-size: 0.9em;
+            word-wrap: break-word;
+        }
+        .actions a {
+            display: inline-block;
+            margin: 2px;
+            padding: 5px 7px;
+            border-radius: 5px;
+            text-decoration: none;
+            color: white;
+            font-size: 0.8em;
+        }
+        .btn { background-color: #457b9d; }
+        .btn:hover { background-color: #1d3557; }
+        .btn.delete { background-color: #e63946; }
+        .btn.delete:hover { background-color: #f77f00; }
+        .back {
+            display: inline-block;
+            margin-bottom: 10px;
+            color: #f1f1f1;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .back:hover { color: #fca311; }
+        .folder-link { color: #ffffff; text-decoration: none; }
+        .folder-link:hover { color: #fca311; }
+        #lightbox {
+            position: fixed;
+            display: none;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        #lightbox img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 10px;
+            box-shadow: 0 0 20px #000;
+            object-fit: contain;
+        }
+        .lightbox-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.45);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 999px;
+            width: 44px;
+            height: 44px;
+            font-size: 28px;
+            line-height: 38px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .lightbox-nav:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        #lightbox-prev { left: 20px; }
+        #lightbox-next { right: 20px; }
+        @media (max-width: 600px) {
+            h1 { font-size: 2em; }
+            .file-card { width: 45%; max-width: 150px; }
+            input[type="file"], input[type="text"], input[type="submit"] { width: 90%; font-size: 0.9em; }
+            .lightbox-nav {
+                width: 38px;
+                height: 38px;
+                font-size: 24px;
+                line-height: 32px;
+            }
+        }
+        @media (max-width: 400px) {
+            .file-card { width: 90%; max-width: 200px; }
+            .grid { gap: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Dungeon Dreamgirls <span>❤️‍🔥</span></h1>
+
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="files" accept="image/*,video/*" multiple required>
+        <input type="submit" value="Upload to '{{ current_path or '/' }}'">
+    </form>
+
+    <form action="/mkdir" method="GET">
+        <input type="hidden" name="path" value="{{ current_path }}">
+        <input type="text" name="name" placeholder="New folder name" required autocomplete="off">
+        <input type="submit" value="Create Folder">
+    </form>
+
+    {% if current_path %}
+    <a class="back" href="/?path={{ parent_path }}">⬅ Back</a>
+    {% endif %}
+
+    <div class="grid">
+        {% for folder in folders %}
+        {% set sub_path = (current_path + '/' + folder).lstrip('/') if current_path else folder %}
+        <div class="file-card">
+            <a class="folder-link" href="/?path={{ sub_path }}">
+                <img src="https://img.icons8.com/ios-filled/150/f1f1f1/folder-invoices.png" alt="{{ folder }}">
+                <div class="filename">{{ folder }}</div>
+            </a>
+            <div class="actions">
+                <a class="btn delete" href="/delete?path={{ sub_path }}" onclick="return confirm('Delete folder and all its contents?')">🗑 Delete</a>
+            </div>
+        </div>
+        {% endfor %}
+
+        {% for file in files %}
+        {% set file_rel_path = (current_path + '/' + file).lstrip('/') if current_path else file %}
+        <div class="file-card">
+            {% if is_video_file(file) %}
+            <video controls preload="metadata"><source src="/files/{{ file_rel_path }}"></video>
+            {% else %}
+            {% set image_index = loop.index0 %}
+            <img src="/files/{{ file_rel_path }}" alt="{{ file }}" onclick="openLightbox({{ image_index }})" style="cursor:pointer">
+            {% endif %}
+            <div class="filename">{{ file }}</div>
+            <div class="actions">
+                <a class="btn" href="/download/{{ file_rel_path }}">⬇ Download</a>
+                <a class="btn delete" href="/delete?path={{ file_rel_path }}" onclick="return confirm('Delete file?')">🗑 Delete</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Lightbox container -->
+    <div id="lightbox" onclick="closeLightbox()">
+        <button id="lightbox-prev" class="lightbox-nav" onclick="event.stopPropagation(); changeLightbox(-1)">&#10094;</button>
+        <img id="lightbox-img" src="" onclick="event.stopPropagation()">
+        <button id="lightbox-next" class="lightbox-nav" onclick="event.stopPropagation(); changeLightbox(1)">&#10095;</button>
+    </div>
+
+    <script>
+    const lightboxImages = {{ image_sources | safe }};
+    let currentLightboxIndex = 0;
+
+    function openLightbox(index) {
+        if (!lightboxImages.length) return;
+        currentLightboxIndex = index;
+        const lightbox = document.getElementById('lightbox');
+        showLightboxImage(currentLightboxIndex);
+        updateLightboxArrows();
+        lightbox.style.display = 'flex';
+    }
+
+    function showLightboxImage(index) {
+        const img = document.getElementById('lightbox-img');
+        img.src = lightboxImages[index];
+    }
+
+    function changeLightbox(step) {
+        if (!lightboxImages.length) return;
+        currentLightboxIndex = (currentLightboxIndex + step + lightboxImages.length) % lightboxImages.length;
+        showLightboxImage(currentLightboxIndex);
+    }
+
+    function updateLightboxArrows() {
+        const showArrows = lightboxImages.length > 1;
+        document.getElementById('lightbox-prev').style.display = showArrows ? 'block' : 'none';
+        document.getElementById('lightbox-next').style.display = showArrows ? 'block' : 'none';
+    }
+
+    function closeLightbox() {
+        document.getElementById('lightbox').style.display = 'none';
+    }
+
+    document.addEventListener('keydown', function(e) {
+        const lightbox = document.getElementById('lightbox');
+        if (lightbox.style.display !== 'flex') return;
+        if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'ArrowLeft') changeLightbox(-1);
+        if (e.key === 'ArrowRight') changeLightbox(1);
+    });
+    </script>
+</body>
+</html>
